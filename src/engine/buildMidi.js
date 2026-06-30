@@ -8,20 +8,32 @@ const DEFAULT_VELOCITY = 0.63  // ~80/127 in @tonejs/midi's 0..1 scale
 
 export function buildOutputMidi(sourceMidi, voicedEvents) {
   const out = new Midi()
-  out.header.setTempo(sourceMidi.header.tempos[0]?.bpm ?? 120)
-  out.header.timeSignatures = sourceMidi.header.timeSignatures
+
+  // copy PPQ so tick values from the source are correctly interpreted
+  out.header.ppq = sourceMidi.header.ppq
+
+  // copy tempo map
+  const tempos = sourceMidi.header.tempos
+  if (tempos && tempos.length > 0) {
+    tempos.forEach(t => out.header.tempos.push({ ...t }))
+  } else {
+    out.header.tempos.push({ bpm: 120, ticks: 0, time: 0 })
+  }
+
+  // copy time signatures
+  const ts = sourceMidi.header.timeSignatures
+  if (ts && ts.length > 0) {
+    ts.forEach(t => out.header.timeSignatures.push({ ...t }))
+  }
 
   const track = out.addTrack()
 
   for (const ev of voicedEvents) {
-    const dur = ev.durationTicks
-    const startTicks = ev.tick
-
     for (const midi of ev.voiced) {
       track.addNote({
         midi,
-        ticks: startTicks,
-        durationTicks: dur,
+        ticks: ev.tick,
+        durationTicks: ev.durationTicks,
         velocity: DEFAULT_VELOCITY,
       })
     }

@@ -128,14 +128,10 @@ export function applyVoiceLeading(prevVoiced, nextVoiced) {
 }
 
 export function voiceEvents(events, targetKey) {
-  let prevVoiced = null
-  return events.map((ev, i) => {
+  return events.map(ev => {
     if (!ev.chord || ev.chord.quality === 'unknown') {
       return { ...ev, voiced: ev.notes.map(n => n.midi) }
     }
-    const raw = voiceChord(ev.chord.rootPc, ev.chord.intervals, targetKey)
-    const voiced = i === 0 ? raw : applyVoiceLeading(prevVoiced, raw)
-    prevVoiced = voiced
-    return { ...ev, voiced }
+    return { ...ev, voiced: voiceChord(ev.chord.rootPc, ev.chord.intervals, targetKey) }
   })
 }
