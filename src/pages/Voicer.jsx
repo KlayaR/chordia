@@ -1,4 +1,10 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { parseChordsFromFile } from '../engine/parseChords'
+import { detectChordsForEvents } from '../engine/detectChord'
+import { voiceEvents, TARGETS } from '../engine/voicer'
+import { buildOutputMidi } from '../engine/buildMidi'
+import { isTauri, writeTempMidi, dragFile } from '../platform'
+import './Voicer.css'
 
 // Prevent the browser from navigating to a dropped file if it misses the drop zone
 function useBlockBrowserFileDrop() {
@@ -12,11 +18,6 @@ function useBlockBrowserFileDrop() {
     }
   }, [])
 }
-import { parseChordsFromFile } from '../engine/parseChords'
-import { detectChordsForEvents } from '../engine/detectChord'
-import { voiceEvents, TARGETS } from '../engine/voicer'
-import { buildOutputMidi, downloadMidi, midiToBlob } from '../engine/buildMidi'
-import './Voicer.css'
 
 const TARGET_ICONS = {
   orchestra: '🎻',
@@ -44,23 +45,36 @@ export default function VoicerPage() {
   const [voicedBlob, setVoicedBlob]         = useState(null)
   const [voicedFilename, setVoicedFilename] = useState('')
   const [dawDragging, setDawDragging]       = useState(false)
+  const [dragPaths, setDragPaths]           = useState(null)  // Tauri: { file, icon }
   const dragUrlRef = useRef(null)
+  const tauri = useMemo(() => isTauri(), [])
 
   // Recompute voiced MIDI whenever source or target changes
   useEffect(() => {
-    if (!parsed) { setVoicedBlob(null); return }
+    if (!parsed) { setVoicedBlob(null); setDragPaths(null); return }
     try {
       const voiced = voiceEvents(parsed.events, target)
       const outMidi = buildOutputMidi(parsed.midi, voiced)
-      setVoicedBlob(midiToBlob(outMidi))
+      const bytes = outMidi.toArray()                    // Uint8Array, serialise once
+      setVoicedBlob(new Blob([bytes], { type: 'audio/midi' }))
       const base = parsed.filename.replace(/\.midi?$/i, '')
-      setVoicedFilename(`${base}_${target}.mid`)
+      const fname = `${base}_${target}.mid`
+      setVoicedFilename(fname)
+
+      // Desktop: pre-write a real temp file so the OS drag is instant
+      if (tauri) {
+        setDragPaths(null)
+        writeTempMidi(fname, bytes)
+          .then(setDragPaths)
+          .catch(err => console.error('temp write failed:', err))
+      }
     } catch (e) {
       console.error('Voice/build error:', e)
       setError(`Failed to build output: ${e.message}`)
       setVoicedBlob(null)
+      setDragPaths(null)
     }
-  }, [parsed, target])
+  }, [parsed, target, tauri])
 
   const handleFile = useCallback(async (file) => {
     if (!file) return
@@ -116,6 +130,22 @@ export default function VoicerPage() {
       if (dragUrlRef.current) { URL.revokeObjectURL(dragUrlRef.current); dragUrlRef.current = null }
     }, 5000)
   }, [])
+
+  // Desktop drag — hand a real on-disk file to the OS (drops into Cubase etc.)
+  const onNativeDrag = useCallback(async (e) => {
+    e.preventDefault()
+    if (!dragPaths) return
+    setDawDragging(true)
+    try {
+      await dragFile(dragPaths.file, dragPaths.icon)
+    } catch (err) {
+      console.error('native drag failed:', err)
+    } finally {
+      setDawDragging(false)
+    }
+  }, [dragPaths])
+
+  const dragReady = tauri ? !!dragPaths : !!voicedBlob
 
   return (
     <div className="voicer-page">
@@ -198,11 +228,14 @@ export default function VoicerPage() {
               </button>
 
               <div
-                draggable={!!voicedBlob}
-                onDragStart={onDawDragStart}
-                onDragEnd={onDawDragEnd}
-                className={`daw-drag ${voicedBlob ? 'ready' : ''} ${dawDragging ? 'dragging' : ''}`}
-                title="Drag this into your DAW's arrange window"
+                draggable={!tauri && dragReady}
+                onDragStart={tauri ? undefined : onDawDragStart}
+                onDragEnd={tauri ? undefined : onDawDragEnd}
+                onMouseDown={tauri ? onNativeDrag : undefined}
+                className={`daw-drag ${dragReady ? 'ready' : ''} ${dawDragging ? 'dragging' : ''}`}
+                title={tauri
+                  ? "Drag straight into your DAW's arrange window"
+                  : "Desktop app drags into Cubase directly — in the browser, use Download"}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="9"  cy="5"  r="1.5" fill="currentColor" stroke="none"/>
