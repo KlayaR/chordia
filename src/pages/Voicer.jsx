@@ -1,8 +1,8 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { parseChordsFromFile } from '../engine/parseChords'
 import { detectChordsForEvents } from '../engine/detectChord'
 import { voiceEvents, TARGETS } from '../engine/voicer'
-import { buildOutputMidi, downloadMidi } from '../engine/buildMidi'
+import { buildOutputMidi, downloadMidi, midiToBlob } from '../engine/buildMidi'
 import './Voicer.css'
 
 const TARGET_ICONS = {
@@ -22,11 +22,25 @@ const TARGET_DESC = {
 }
 
 export default function VoicerPage() {
-  const [dragging, setDragging] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [parsed, setParsed] = useState(null)      // { events, ppq, midi, filename }
-  const [target, setTarget] = useState('orchestra')
+  const [dropping, setDropping] = useState(false)
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState(null)
+  const [parsed, setParsed]     = useState(null)
+  const [target, setTarget]     = useState('orchestra')
+  const [voicedBlob, setVoicedBlob]         = useState(null)
+  const [voicedFilename, setVoicedFilename] = useState('')
+  const [dawDragging, setDawDragging]       = useState(false)
+  const dragUrlRef = useRef(null)
+
+  // Recompute voiced MIDI whenever source or target changes
+  useEffect(() => {
+    if (!parsed) { setVoicedBlob(null); return }
+    const voiced = voiceEvents(parsed.events, target)
+    const outMidi = buildOutputMidi(parsed.midi, voiced)
+    setVoicedBlob(midiToBlob(outMidi))
+    const base = parsed.filename.replace(/\.midi?$/i, '')
+    setVoicedFilename(`${base}_${target}.mid`)
+  }, [parsed, target])
 
   const handleFile = useCallback(async (file) => {
     if (!file) return
@@ -47,27 +61,41 @@ export default function VoicerPage() {
 
   const onDrop = useCallback((e) => {
     e.preventDefault()
-    setDragging(false)
+    setDropping(false)
     const file = e.dataTransfer.files[0]
     if (file) handleFile(file)
   }, [handleFile])
 
-  const onDragOver = (e) => { e.preventDefault(); setDragging(true) }
-  const onDragLeave = () => setDragging(false)
+  const onDragOver  = (e) => { e.preventDefault(); setDropping(true) }
+  const onDragLeave = () => setDropping(false)
   const onFileInput = (e) => handleFile(e.target.files[0])
 
   const handleExport = () => {
-    if (!parsed) return
-    const voiced = voiceEvents(parsed.events, target)
-    const outMidi = buildOutputMidi(parsed.midi, voiced)
-    const base = parsed.filename.replace(/\.midi?$/i, '')
-    downloadMidi(outMidi, `${base}_${target}.mid`)
+    if (!voicedBlob) return
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(voicedBlob)
+    a.download = voicedFilename
+    a.click()
   }
 
-  const chordSummary = parsed
-    ? [...new Map(parsed.events.map(e => [e.chord?.symbol, e.chord])).values()]
-        .filter(c => c && c.quality !== 'unknown')
-    : []
+  // DAW drag — DownloadURL tells Chrome to hand a real file to the OS drag target
+  const onDawDragStart = useCallback((e) => {
+    if (!voicedBlob) { e.preventDefault(); return }
+    if (dragUrlRef.current) URL.revokeObjectURL(dragUrlRef.current)
+    const url = URL.createObjectURL(voicedBlob)
+    dragUrlRef.current = url
+    e.dataTransfer.setData('DownloadURL', `audio/midi:${voicedFilename}:${url}`)
+    e.dataTransfer.effectAllowed = 'copy'
+    setDawDragging(true)
+  }, [voicedBlob, voicedFilename])
+
+  const onDawDragEnd = useCallback(() => {
+    setDawDragging(false)
+    // Delay revoke so Chrome finishes the transfer
+    setTimeout(() => {
+      if (dragUrlRef.current) { URL.revokeObjectURL(dragUrlRef.current); dragUrlRef.current = null }
+    }, 5000)
+  }, [])
 
   return (
     <div className="voicer-page">
@@ -76,9 +104,9 @@ export default function VoicerPage() {
         <p className="voicer-sub">Drop a MIDI file · pick a target · export re-voiced chords</p>
       </div>
 
-      {/* Drop zone */}
+      {/* MIDI drop zone */}
       <div
-        className={`drop-zone ${dragging ? 'drag-over' : ''} ${parsed ? 'has-file' : ''}`}
+        className={`drop-zone ${dropping ? 'drag-over' : ''} ${parsed ? 'has-file' : ''}`}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -141,11 +169,32 @@ export default function VoicerPage() {
             </div>
           </section>
 
-          {/* Export */}
+          {/* Export + DAW drag */}
           <section className="section">
-            <button className="export-btn" onClick={handleExport}>
-              Export re-voiced MIDI
-            </button>
+            <h2 className="section-title">Export</h2>
+            <div className="export-row">
+              <button className="export-btn" onClick={handleExport}>
+                Download MIDI
+              </button>
+
+              <div
+                draggable={!!voicedBlob}
+                onDragStart={onDawDragStart}
+                onDragEnd={onDawDragEnd}
+                className={`daw-drag ${voicedBlob ? 'ready' : ''} ${dawDragging ? 'dragging' : ''}`}
+                title="Drag this into your DAW's arrange window"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="9"  cy="5"  r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="9"  cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="9"  cy="19" r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="15" cy="5"  r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="15" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                  <circle cx="15" cy="19" r="1.5" fill="currentColor" stroke="none"/>
+                </svg>
+                <span>Drag to DAW</span>
+              </div>
+            </div>
           </section>
         </>
       )}
