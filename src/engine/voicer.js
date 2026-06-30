@@ -1,137 +1,252 @@
 /**
- * Re-voice a chord for a target instrument group.
+ * String orchestration by independent voice leading.
  *
- * Strategy: each target defines a list of "slots" — each slot has a center
- * MIDI note and a priority index into the chord tones (0=root, 1=3rd/2nd,
- * 2=5th/4th, 3=7th).  nearestInOctave() finds which octave of that chord
- * tone lands closest to the slot center.
+ * Each section of the string orchestra is treated as an independent player with
+ * a fixed working register and carried-over pitch — NOT a keyboard layer. For
+ * every chord we generate candidate voicings, score them by voice-leading cost
+ * (common tones held, small steps, contrary motion, no parallels/crossings) and
+ * keep the cheapest. The result is one part per section that moves smoothly from
+ * chord to chord.
  *
- * This produces natural orchestral register spreading with heavy doubling on
- * the root, less on the 5th, least on the 3rd — without needing to know the
- * exact key in advance.
+ * Pitches are MIDI numbers in scientific pitch (C4 = 60 = middle C).
  */
 
-// Find the MIDI note with pitch class `pc` nearest to `center`
-function nearestInOctave(pc, center) {
-  return Math.round((center - pc) / 12) * 12 + pc
-}
-
-function clamp(n) { return Math.max(12, Math.min(108, n)) }
-
-// priority index → chord tone index (0=root, 1=3rd, 2=5th, 3=7th)
-// intervals are already sorted [0, 3/4, 7, 10/11]
-const PRIO = [0, 1, 2, 3]
-
-function buildFromSlots(rootPc, intervals, slots) {
-  // chord tone pitch classes in priority order: root, 3rd, 5th, 7th
-  const tones = intervals.map(i => (rootPc + i) % 12)
-  const notes = new Set()
-
-  for (const { prio, center } of slots) {
-    const idx = Math.min(prio, tones.length - 1)
-    const pc = tones[idx]
-    const midi = clamp(nearestInOctave(pc, center))
-    notes.add(midi)
-  }
-
-  return Array.from(notes).sort((a, b) => a - b)
-}
-
-// ---------------------------------------------------------------------------
-// Target definitions
-// ---------------------------------------------------------------------------
-
-// Full Orchestra — A1 up to ~C6, heavy doublings on root and 5th
-const ORCHESTRA_SLOTS = [
-  { prio: 0, center: 21 },   // root  ~ A1 (sub-bass anchor)
-  { prio: 0, center: 33 },   // root  ~ A2 (bass)
-  { prio: 2, center: 40 },   // 5th   ~ E3
-  { prio: 0, center: 45 },   // root  ~ A3
-  { prio: 1, center: 48 },   // 3rd   ~ C4
-  { prio: 2, center: 52 },   // 5th   ~ E4
-  { prio: 0, center: 57 },   // root  ~ A4
-  { prio: 2, center: 64 },   // 5th   ~ E5
-  { prio: 0, center: 69 },   // root  ~ A5
+// Sections, bottom -> top. Ranges are the practical "working" registers.
+const SECTIONS = [
+  { id: 'cb', name: 'Contrabass', lo: 28, hi: 43, center: 33 }, // E1–G2
+  { id: 'vc', name: 'Cello',      lo: 36, hi: 62, center: 48 }, // C2–D4
+  { id: 'va', name: 'Viola',      lo: 48, hi: 67, center: 57 }, // C3–G4
+  { id: 'v2', name: 'Violin II',  lo: 55, hi: 74, center: 64 }, // G3–D5
+  { id: 'v1', name: 'Violin I',   lo: 60, hi: 88, center: 72 }, // C4–E6
 ]
-
-// String Ensemble — tighter, A2–A4
-const STRINGS_SLOTS = [
-  { prio: 0, center: 33 },   // root  ~ A2 (cello bass)
-  { prio: 2, center: 40 },   // 5th   ~ E3
-  { prio: 0, center: 45 },   // root  ~ A3 (viola)
-  { prio: 1, center: 52 },   // 3rd   ~ E4
-  { prio: 2, center: 57 },   // 5th   ~ A4 (violin)
-  { prio: 0, center: 64 },   // root  ~ E5 (top)
-]
-
-// Brass — punchy Bb2–Bb4 register, typically open voicing
-const BRASS_SLOTS = [
-  { prio: 0, center: 34 },   // root  ~ Bb2 (tuba)
-  { prio: 2, center: 41 },   // 5th   ~ F3
-  { prio: 0, center: 46 },   // root  ~ Bb3 (trombone)
-  { prio: 1, center: 50 },   // 3rd   ~ D4
-  { prio: 2, center: 53 },   // 5th   ~ F4 (horn)
-  { prio: 0, center: 58 },   // root  ~ Bb4 (trumpet)
-]
-
-// Choir SATB — C3–G5, 4 close voices
-const CHOIR_SLOTS = [
-  { prio: 0, center: 45 },   // Bass   ~ A3 (root)
-  { prio: 2, center: 52 },   // Tenor  ~ E4 (5th)
-  { prio: 0, center: 57 },   // Alto   ~ A4 (root)
-  { prio: 1, center: 60 },   // Soprano~ C5 (3rd)
-]
-
-// Piano — root in left hand (A2), full chord in right (A3–E5)
-const PIANO_SLOTS = [
-  { prio: 0, center: 33 },   // LH root
-  { prio: 2, center: 40 },   // LH 5th
-  { prio: 0, center: 45 },   // RH root
-  { prio: 1, center: 52 },   // RH 3rd
-  { prio: 2, center: 57 },   // RH 5th
-  { prio: 0, center: 64 },   // RH top
-]
+const N = SECTIONS.length
+const CB = 0
+const V1 = N - 1
 
 export const TARGETS = {
-  orchestra: { label: 'Full Orchestra', slots: ORCHESTRA_SLOTS },
-  strings:   { label: 'String Ensemble', slots: STRINGS_SLOTS },
-  brass:     { label: 'Brass',           slots: BRASS_SLOTS },
-  choir:     { label: 'Choir (SATB)',    slots: CHOIR_SLOTS },
-  piano:     { label: 'Piano',           slots: PIANO_SLOTS },
+  orchestra: { label: 'Full Orchestra', doublings: true },
+  strings:   { label: 'String Ensemble', doublings: false },
 }
 
-export function voiceChord(rootPc, intervals, targetKey) {
-  const target = TARGETS[targetKey] || TARGETS.orchestra
-  if (!intervals || intervals.length === 0) return []
-  return buildFromSlots(rootPc, intervals, target.slots)
+const sign = (x) => (x > 0 ? 1 : x < 0 ? -1 : 0)
+const pc = (m) => ((m % 12) + 12) % 12
+
+// ---------------------------------------------------------------------------
+// Chord-tone analysis
+// ---------------------------------------------------------------------------
+function chordInfo(chord) {
+  const root = chord.rootPc
+  const iv = chord.intervals || []
+  const tones = iv.map((i) => pc(root + i))
+  const toneSet = new Set(tones)
+
+  const third = iv.length > 1 ? pc(root + iv[1]) : null
+  // seventh = a tone 10 or 11 semitones above the root, if present
+  let seventh = null
+  for (const i of iv) if (i === 10 || i === 11) seventh = pc(root + i)
+  // fifth = a tone 6,7,8 semitones above the root
+  let fifth = null
+  for (const i of iv) if (i === 6 || i === 7 || i === 8) fifth = pc(root + i)
+
+  const mandatory = new Set([root])
+  if (third !== null) mandatory.add(third)
+  if (seventh !== null) mandatory.add(seventh)
+
+  return { root, third, fifth, seventh, tones, toneSet, mandatory }
+}
+
+// MIDI notes inside a section's register whose pitch class is a chord tone.
+function allowedPitches(section, toneSet) {
+  const out = []
+  for (let m = section.lo; m <= section.hi; m++) if (toneSet.has(pc(m))) out.push(m)
+  return out
 }
 
 // ---------------------------------------------------------------------------
-// Simple voice leading: for each slot position, slide to nearest octave of
-// the new chord tone rather than jumping.  Applied between consecutive events.
+// Candidate generation (backtracking with hard constraints)
 // ---------------------------------------------------------------------------
-export function applyVoiceLeading(prevVoiced, nextVoiced) {
-  if (!prevVoiced || prevVoiced.length === 0) return nextVoiced
-  if (nextVoiced.length === 0) return nextVoiced
+function generateCandidates(info, maxUpperGap = 12) {
+  const allowed = SECTIONS.map((s) => allowedPitches(s, info.toneSet))
+  if (allowed.some((a) => a.length === 0)) return []
 
-  // For each note in nextVoiced, find nearest octave relative to prevVoiced centroid
-  const prevCentroid = prevVoiced.reduce((s, n) => s + n, 0) / prevVoiced.length
+  const results = []
+  const chosen = new Array(N)
 
-  return nextVoiced
-    .map(midi => {
-      const pc = midi % 12
-      // find nearest octave to prevCentroid
-      const nearest = nearestInOctave(pc, Math.round(prevCentroid))
-      return clamp(nearest)
-    })
-    .sort((a, b) => a - b)
-}
-
-export function voiceEvents(events, targetKey) {
-  return events.map(ev => {
-    if (!ev.chord || ev.chord.quality === 'unknown') {
-      return { ...ev, voiced: ev.notes.map(n => n.midi) }
+  function recurse(idx) {
+    if (idx === N) {
+      const pcs = chosen.map(pc)
+      for (const need of info.mandatory) if (!pcs.includes(need)) return
+      results.push(chosen.slice())
+      return
     }
-    return { ...ev, voiced: voiceChord(ev.chord.rootPc, ev.chord.intervals, targetKey) }
+    for (const p of allowed[idx]) {
+      if (idx > 0) {
+        const below = chosen[idx - 1]
+        if (p < below) continue                       // no crossing
+        const gap = p - below
+        if (idx === 1) {                              // CB -> Cello: avoid low mud
+          if (gap < 4) continue
+        } else if (gap > maxUpperGap) {               // upper voices stay within an 8ve
+          continue
+        }
+      }
+      chosen[idx] = p
+      recurse(idx + 1)
+    }
+  }
+  recurse(0)
+  return results
+}
+
+// ---------------------------------------------------------------------------
+// Scoring
+// ---------------------------------------------------------------------------
+function isParallelPerfect(pi, pj, ci, cj) {
+  const di = ci - pi
+  const dj = cj - pj
+  if (di === 0 || dj === 0) return false
+  if (sign(di) !== sign(dj)) return false
+  const before = Math.abs(pi - pj) % 12
+  const after = Math.abs(ci - cj) % 12
+  return (before === 7 && after === 7) || (before === 0 && after === 0)
+}
+
+function isHiddenOuter(pb, pt, cb, ct) {
+  const db = cb - pb
+  const dt = ct - pt
+  if (db === 0 || dt === 0) return false
+  if (sign(db) !== sign(dt)) return false   // only similar motion
+  if (Math.abs(dt) <= 2) return false        // top voice moved by step → acceptable
+  const after = Math.abs(cb - ct) % 12
+  return after === 7 || after === 0
+}
+
+function staticScore(cand, info) {
+  // Used for the first chord (no previous voicing). Prefer each voice near its
+  // section centre, root in the bass, open low spacing.
+  let s = 0
+  for (let i = 0; i < N; i++) s += Math.abs(cand[i] - SECTIONS[i].center) * 0.5
+  if (pc(cand[CB]) !== info.root) s += 6      // root in the bass
+  if (cand[1] - cand[CB] < 7) s += 4          // want >= a 5th at the bottom
+  return s
+}
+
+function transitionScore(prev, cand, info) {
+  let s = 0
+
+  for (let i = 0; i < N; i++) {
+    const move = Math.abs(cand[i] - prev[i])
+    s += move
+    if (move === 0) s -= 2.5                   // reward common-tone retention
+    else if (move > 4) s += (move - 4) * 3     // penalise leaps beyond a major 3rd
+  }
+
+  // parallel 5ths / octaves (any pair) — near-forbidden
+  for (let i = 0; i < N; i++)
+    for (let j = i + 1; j < N; j++)
+      if (isParallelPerfect(prev[i], prev[j], cand[i], cand[j])) s += 1000
+
+  // hidden 5th / octave between the outer voices
+  if (isHiddenOuter(prev[CB], prev[V1], cand[CB], cand[V1])) s += 120
+
+  // overlap: a voice rising above where the voice above it just was
+  for (let i = 0; i < N - 1; i++) if (cand[i] > prev[i + 1]) s += 80
+
+  // reward contrary motion between the outer voices
+  const db = sign(cand[CB] - prev[CB])
+  const dt = sign(cand[V1] - prev[V1])
+  if (db !== 0 && dt !== 0 && db !== dt) s -= 6
+
+  s += spacingAndDoubling(cand, info)
+  return s
+}
+
+function spacingAndDoubling(cand, info) {
+  let s = 0
+  const pcs = cand.map(pc)
+
+  // bass character: root best, fifth ok, third = 1st inversion (mild), 7th avoid
+  if (pcs[CB] === info.root) s -= 3
+  else if (info.fifth !== null && pcs[CB] === info.fifth) s += 2
+  else if (info.third !== null && pcs[CB] === info.third) s += 6
+  else s += 14                                 // 7th or extension in the bass
+
+  // doubling: reward a doubled root, discourage doubling the 3rd / leading tone
+  const rootCount = pcs.filter((p) => p === info.root).length
+  if (rootCount >= 2) s -= 3
+  if (info.third !== null && pcs.filter((p) => p === info.third).length >= 2) s += 16
+  if (info.seventh !== null && pcs.filter((p) => p === info.seventh).length >= 2) s += 12
+
+  // discourage dense mid-range stacking (va/v2/cello inside one octave)
+  if (cand[3] - cand[1] < 12) s += 5
+
+  // discourage unisons between adjacent voices
+  for (let i = 0; i < N - 1; i++) if (cand[i] === cand[i + 1]) s += 8
+
+  return s
+}
+
+// ---------------------------------------------------------------------------
+// Solve one chord
+// ---------------------------------------------------------------------------
+function solveChord(info, prev) {
+  let cands = generateCandidates(info, 12)
+  if (cands.length === 0) cands = generateCandidates(info, 15)   // relax spacing
+  if (cands.length === 0) return fallbackVoicing(info)
+
+  let best = null
+  let bestCost = Infinity
+  for (const c of cands) {
+    const cost = prev ? transitionScore(prev, c, info) : staticScore(c, info)
+    if (cost < bestCost) { bestCost = cost; best = c }
+  }
+  return best
+}
+
+// Last resort: nearest octave of a chord tone to each section centre.
+function fallbackVoicing(info) {
+  return SECTIONS.map((s) => {
+    let best = s.center
+    let bestD = Infinity
+    for (let m = s.lo; m <= s.hi; m++) {
+      if (!info.toneSet.has(pc(m))) continue
+      const d = Math.abs(m - s.center)
+      if (d < bestD) { bestD = d; best = m }
+    }
+    return best
   })
 }
+
+// ---------------------------------------------------------------------------
+// Doublings for the fuller "orchestra" target
+// ---------------------------------------------------------------------------
+function withDoublings(voicing) {
+  const out = new Set(voicing)
+  const bassOct = voicing[CB] + 12     // basses + celli an octave apart
+  if (bassOct <= 60) out.add(bassOct)
+  const topOct = voicing[V1] + 12      // violins octave on top
+  if (topOct <= 96) out.add(topOct)
+  return Array.from(out).sort((a, b) => a - b)
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+export function voiceEvents(events, targetKey) {
+  const target = TARGETS[targetKey] || TARGETS.orchestra
+  let prev = null
+  return events.map((ev) => {
+    if (!ev.chord || ev.chord.quality === 'unknown' || !ev.chord.intervals?.length) {
+      prev = null
+      return { ...ev, voiced: ev.notes.map((n) => n.midi) }
+    }
+    const info = chordInfo(ev.chord)
+    const voicing = solveChord(info, prev)
+    prev = voicing
+    const voiced = target.doublings ? withDoublings(voicing) : voicing.slice()
+    return { ...ev, voiced }
+  })
+}
+
+// Exposed for tests / debugging
+export { SECTIONS, chordInfo, solveChord }

@@ -22,17 +22,11 @@ function useBlockBrowserFileDrop() {
 const TARGET_ICONS = {
   orchestra: '🎻',
   strings:   '🎼',
-  brass:     '🎺',
-  choir:     '🎤',
-  piano:     '🎹',
 }
 
 const TARGET_DESC = {
-  orchestra: 'Wide spread · sub-bass to high · heavy doublings',
-  strings:   'A2–E5 · tight ensemble voicing',
-  brass:     'Bb2–Bb4 · punchy open register',
-  choir:     'SATB · C3–C5 · 4 close voices',
-  piano:     'Root LH · chord RH · 2-hand span',
+  orchestra: '5 string voices + octave doublings · full & wide',
+  strings:   '5 independent voices · true voice leading',
 }
 
 export default function VoicerPage() {

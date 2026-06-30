@@ -38,15 +38,22 @@ export function detectChord(pitchClasses) {
   let best = null
   let bestScore = -Infinity
 
+  const inputPcs = [...pcs]
   for (let root = 0; root < 12; root++) {
     for (const [quality, intervals, suffix, priority] of CHORD_TYPES) {
       const transposed = intervals.map(i => (root + i) % 12)
+      const tset = new Set(transposed)
       const matched = transposed.filter(pc => pcs.has(pc)).length
       const total = transposed.length
       if (matched < Math.ceil(total * 0.6)) continue // need at least 60% match
 
-      // score: matched notes vs total, penalise complexity
-      const score = (matched / total) * 100 - priority * 2 + (matched === total ? 10 : 0)
+      // notes in the input the template can't explain (e.g. a 7th left over
+      // when matching a plain triad) — penalised so richer chords win when
+      // their colour notes are actually present
+      const extra = inputPcs.filter(pc => !tset.has(pc)).length
+
+      const score = (matched / total) * 100 - priority * 2
+        + (matched === total ? 10 : 0) - extra * 15
       if (score > bestScore) {
         bestScore = score
         best = { root, rootPc: root, quality, intervals, suffix, score }
