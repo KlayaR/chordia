@@ -1,4 +1,17 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+
+// Prevent the browser from navigating to a dropped file if it misses the drop zone
+function useBlockBrowserFileDrop() {
+  useEffect(() => {
+    const block = (e) => e.preventDefault()
+    document.addEventListener('dragover', block)
+    document.addEventListener('drop', block)
+    return () => {
+      document.removeEventListener('dragover', block)
+      document.removeEventListener('drop', block)
+    }
+  }, [])
+}
 import { parseChordsFromFile } from '../engine/parseChords'
 import { detectChordsForEvents } from '../engine/detectChord'
 import { voiceEvents, TARGETS } from '../engine/voicer'
@@ -22,6 +35,7 @@ const TARGET_DESC = {
 }
 
 export default function VoicerPage() {
+  useBlockBrowserFileDrop()
   const [dropping, setDropping] = useState(false)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState(null)
