@@ -49,11 +49,17 @@ export default function VoicerPage() {
   // Recompute voiced MIDI whenever source or target changes
   useEffect(() => {
     if (!parsed) { setVoicedBlob(null); return }
-    const voiced = voiceEvents(parsed.events, target)
-    const outMidi = buildOutputMidi(parsed.midi, voiced)
-    setVoicedBlob(midiToBlob(outMidi))
-    const base = parsed.filename.replace(/\.midi?$/i, '')
-    setVoicedFilename(`${base}_${target}.mid`)
+    try {
+      const voiced = voiceEvents(parsed.events, target)
+      const outMidi = buildOutputMidi(parsed.midi, voiced)
+      setVoicedBlob(midiToBlob(outMidi))
+      const base = parsed.filename.replace(/\.midi?$/i, '')
+      setVoicedFilename(`${base}_${target}.mid`)
+    } catch (e) {
+      console.error('Voice/build error:', e)
+      setError(`Failed to build output: ${e.message}`)
+      setVoicedBlob(null)
+    }
   }, [parsed, target])
 
   const handleFile = useCallback(async (file) => {

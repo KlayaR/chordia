@@ -4,15 +4,18 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import Nav from './components/Nav'
 import VoicerPage from './pages/Voicer'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function App() {
   return (
     <HashRouter>
       <Nav />
-      <Routes>
-        <Route path="/voicer" element={<VoicerPage />} />
-        <Route path="*" element={<Navigate to="/voicer" replace />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/voicer" element={<VoicerPage />} />
+          <Route path="*" element={<Navigate to="/voicer" replace />} />
+        </Routes>
+      </ErrorBoundary>
     </HashRouter>
   )
 }
