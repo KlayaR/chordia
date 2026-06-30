@@ -46,6 +46,7 @@ export default function VoicerPage() {
   const [voicedFilename, setVoicedFilename] = useState('')
   const [dawDragging, setDawDragging]       = useState(false)
   const [dragPaths, setDragPaths]           = useState(null)  // Tauri: { file, icon }
+  const [dragStatus, setDragStatus]         = useState('')
   const dragUrlRef = useRef(null)
   const tauri = useMemo(() => isTauri(), [])
 
@@ -132,17 +133,20 @@ export default function VoicerPage() {
   }, [])
 
   // Desktop drag — hand a real on-disk file to the OS (drops into Cubase etc.)
-  const onNativeDrag = useCallback(async (e) => {
-    e.preventDefault()
-    if (!dragPaths) return
+  // Called on mousedown; fire startDrag immediately (no await) so Windows
+  // catches the gesture. Modules are preloaded in platform.js.
+  const onNativeDrag = useCallback((e) => {
+    if (e.button !== 0 || !dragPaths) return
     setDawDragging(true)
-    try {
-      await dragFile(dragPaths.file, dragPaths.icon)
-    } catch (err) {
-      console.error('native drag failed:', err)
-    } finally {
+    setDragStatus('dragging…')
+    dragFile(dragPaths.file, dragPaths.icon, (payload) => {
       setDawDragging(false)
-    }
+      setDragStatus(payload?.result === 'Dropped' ? 'dropped ✓' : 'cancelled')
+    }).catch((err) => {
+      console.error('native drag failed:', err)
+      setDawDragging(false)
+      setDragStatus('error: ' + (err?.message ?? err))
+    })
   }, [dragPaths])
 
   const dragReady = tauri ? !!dragPaths : !!voicedBlob
@@ -221,7 +225,14 @@ export default function VoicerPage() {
 
           {/* Export + DAW drag */}
           <section className="section">
-            <h2 className="section-title">Export</h2>
+            <h2 className="section-title">
+              Export
+              {tauri && (
+                <span className="mode-badge" title="Native desktop drag is active">
+                  ● Desktop{dragPaths ? ' · ready' : ' · preparing…'}
+                </span>
+              )}
+            </h2>
             <div className="export-row">
               <button className="export-btn" onClick={handleExport}>
                 Download MIDI
@@ -247,6 +258,10 @@ export default function VoicerPage() {
                 </svg>
                 <span>Drag to DAW</span>
               </div>
+
+              {tauri && dragStatus && (
+                <span className="drag-status">{dragStatus}</span>
+              )}
             </div>
           </section>
         </>
