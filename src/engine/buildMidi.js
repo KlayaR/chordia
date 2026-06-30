@@ -1,30 +1,29 @@
-/**
- * Build an output MIDI file from voiced chord events.
- * Single track, single channel, velocity 80 by default.
- */
 import { Midi } from '@tonejs/midi'
 
-const DEFAULT_VELOCITY = 0.63  // ~80/127 in @tonejs/midi's 0..1 scale
+const DEFAULT_VELOCITY = 0.63  // ~80/127
 
 export function buildOutputMidi(sourceMidi, voicedEvents) {
-  // Serialise source to JSON and back — the cleanest way to clone header
-  // metadata (ppq, tempos, time-sigs) without fighting read-only properties.
-  const srcJson = sourceMidi.toJSON()
-  const outJson = {
-    header: {
-      ppq: srcJson.header.ppq,
-      tempos: srcJson.header.tempos ?? [{ bpm: 120, ticks: 0 }],
-      timeSignatures: srcJson.header.timeSignatures ?? [],
-      keySignatures: [],
-      meta: [],
-      name: '',
-    },
-    tracks: [{ notes: [], controlChanges: {}, pitchBends: [], instrument: {}, channel: 0, name: '' }],
+  const out = new Midi()
+  const srcPpq = sourceMidi.header.ppq || 480
+
+  // TypeScript marks ppq as readonly but the compiled JS property is writable
+  out.header.ppq = srcPpq
+
+  // Copy tempo map
+  const srcTempos = sourceMidi.header.tempos
+  if (srcTempos && srcTempos.length > 0) {
+    srcTempos.forEach(t => out.header.tempos.push({ bpm: t.bpm, ticks: t.ticks, time: t.time }))
+  } else {
+    out.header.tempos.push({ bpm: 120, ticks: 0, time: 0 })
   }
 
-  const out = new Midi(JSON.stringify(outJson))
-  const track = out.tracks[0]
-  const ppq = out.header.ppq
+  // Copy time signatures
+  const srcTs = sourceMidi.header.timeSignatures
+  if (srcTs && srcTs.length > 0) {
+    srcTs.forEach(t => out.header.timeSignatures.push({ ...t }))
+  }
+
+  const track = out.addTrack()
 
   for (const ev of voicedEvents) {
     if (!ev.voiced || ev.voiced.length === 0) continue
@@ -32,7 +31,7 @@ export function buildOutputMidi(sourceMidi, voicedEvents) {
       track.addNote({
         midi: Math.max(0, Math.min(127, Math.round(midi))),
         ticks: Math.max(0, Math.round(ev.tick)),
-        durationTicks: Math.max(1, Math.round(ev.durationTicks ?? ppq / 2)),
+        durationTicks: Math.max(1, Math.round(ev.durationTicks ?? srcPpq / 2)),
         velocity: DEFAULT_VELOCITY,
       })
     }
