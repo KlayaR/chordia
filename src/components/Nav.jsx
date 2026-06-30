@@ -3,6 +3,7 @@ import './Nav.css'
 
 const TOOLS = [
   { to: '/voicer', label: 'Voicer' },
+  { to: '/scale-finder', label: 'Scale Finder' },
   // { to: '/song-builder', label: 'Song Builder' },  // coming soon
 ]
 

@@ -1,0 +1,92 @@
+.sf-page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sf-head { text-align: center; }
+.sf-head h1 { font-size: 1.9rem; font-weight: 700; color: var(--text); margin-bottom: 0.3rem; }
+.sf-sub { color: var(--muted); font-size: 0.88rem; }
+
+.piano-kbd {
+  width: 100%;
+  height: 170px;
+  display: block;
+  border-radius: 8px;
+  overflow: hidden;
+  user-select: none;
+}
+
+.sf-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.sf-selected { color: var(--muted); font-size: 0.9rem; }
+.sf-selected b { color: var(--text); letter-spacing: 0.06em; }
+.sf-check { display: flex; align-items: center; gap: 0.4rem; color: var(--muted); font-size: 0.85rem; cursor: pointer; margin-left: auto; }
+.sf-check input { accent-color: var(--accent); }
+
+.sf-btn {
+  padding: 0.45rem 1.1rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.sf-btn:disabled { opacity: 0.4; cursor: default; }
+.sf-btn.ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+.sf-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+@media (max-width: 720px) { .sf-cols { grid-template-columns: 1fr; } }
+
+.sf-col { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+.sf-title {
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted);
+}
+
+.sf-list { display: flex; flex-direction: column; gap: 3px; max-height: 340px; overflow-y: auto; }
+.sf-empty { color: var(--muted); font-size: 0.82rem; padding: 0.5rem 0; }
+
+.sf-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.sf-item:hover { border-color: var(--accent); background: var(--surface2); }
+.sf-item.exact { background: rgba(110, 223, 200, 0.08); }
+.sf-item-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sf-tag { color: var(--muted); font-size: 0.74rem; white-space: nowrap; }
+.sf-tag.ok { color: var(--accent2); font-weight: 600; }
+
+.sf-drop {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 1rem;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.sf-drop.over { border-color: var(--accent); background: rgba(167, 143, 255, 0.06); }
+.sf-drop-label { color: var(--muted); font-size: 0.85rem; cursor: pointer; }
+.sf-browse { color: var(--accent); text-decoration: underline; }
+
+.sf-result {
+  display: flex; flex-direction: column; gap: 0.2rem;
+  background: var(--surface2); border-radius: 8px; padding: 0.6rem 0.8rem;
+}
+.sf-result b { color: var(--accent); }
+.sf-result-meta { color: var(--muted); font-size: 0.76rem; }
+.sf-err { color: #ff6b6b; font-size: 0.82rem; }
