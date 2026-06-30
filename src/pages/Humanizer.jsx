@@ -3,6 +3,7 @@ import { parseDrums } from '../engine/drums/drumParser'
 import { humanize, exportResult } from '../engine/drums/drumHumanizer'
 import { DRUM_MAPS, DRUM_MAP_NAMES, DEFAULT_MAP } from '../engine/drums/drumMaps'
 import { isTauri, writeTempMidi, dragFile } from '../platform'
+import DrumRoll from '../components/DrumRoll'
 import './Humanizer.css'
 
 function useBlockBrowserFileDrop() {
@@ -38,6 +39,8 @@ export default function HumanizerPage() {
   const [feel, setFeel] = useState(0)
 
   const [summary, setSummary] = useState([])
+  const [result, setResult] = useState(null)
+  const [view, setView] = useState('after')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [dropping, setDropping] = useState(false)
@@ -65,7 +68,7 @@ export default function HumanizerPage() {
 
   // humanize whenever inputs change (re-map voices first so a map switch applies)
   useEffect(() => {
-    if (!parse) { setBlob(null); setDragPaths(null); setSummary([]); return }
+    if (!parse) { setBlob(null); setDragPaths(null); setSummary([]); setResult(null); return }
     let cancelled = false
     ;(async () => {
       try {
@@ -74,6 +77,7 @@ export default function HumanizerPage() {
         const result = humanize(parse, map, { velocityIntensity: vel, timingIntensity: timing, feel, seed: 1 })
         const midi = await exportResult(result)
         if (cancelled) return
+        setResult(result)
         const bytes = midi.toArray()
         setBlob(new Blob([bytes], { type: 'audio/midi' }))
         const base = filename.replace(/\.midi?$/i, '')
@@ -157,6 +161,27 @@ export default function HumanizerPage() {
             <Slider label="Timing (groove + feel humanization)" value={timing} set={setTiming} min={0} max={100} suffix="%" />
             <Slider label="Feel (− push · + laid-back)" value={feel} set={setFeel} min={-100} max={100} suffix="" />
           </section>
+
+          {result && (
+            <section className="hz-section">
+              <div className="hz-roll-head">
+                <h2 className="hz-title">Piano roll</h2>
+                <div className="hz-toggle">
+                  <button className={view === 'before' ? 'on' : ''} onClick={() => setView('before')}>Before</button>
+                  <button className={view === 'after' ? 'on' : ''} onClick={() => setView('after')}>After</button>
+                </div>
+              </div>
+              <div className="hz-legend">
+                <span style={{ color: '#ff9a3c' }}>●</span> Kick
+                <span style={{ color: '#e74c3c' }}>●</span> Snare
+                <span style={{ color: '#1abc9c' }}>●</span> Hi-hat
+                <span style={{ color: '#3498db' }}>●</span> Toms
+                <span style={{ color: '#9b59b6' }}>●</span> Cymbals
+              </div>
+              <DrumRoll before={result.originalNotes} after={result.notes}
+                drumMap={DRUM_MAPS[mapName] || DRUM_MAPS[DEFAULT_MAP]} ppq={parse.ppq} view={view} />
+            </section>
+          )}
 
           {summary.length > 0 && (
             <section className="hz-section">

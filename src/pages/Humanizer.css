@@ -53,6 +53,16 @@
 .hz-slider-head b { color: var(--text); }
 .hz-slider input[type=range] { width: 100%; accent-color: var(--accent); }
 
+.hz-roll-head { display: flex; align-items: center; justify-content: space-between; }
+.hz-toggle { display: flex; gap: 2px; background: var(--surface2); border-radius: 7px; padding: 2px; }
+.hz-toggle button {
+  padding: 0.25rem 0.8rem; border: none; background: transparent;
+  color: var(--muted); font-size: 0.78rem; font-weight: 600; border-radius: 5px;
+}
+.hz-toggle button.on { background: var(--accent); color: #fff; }
+.hz-legend { display: flex; gap: 0.9rem; font-size: 0.74rem; color: var(--muted); align-items: center; }
+.hz-legend span { margin-right: 0.2rem; }
+
 .hz-report {
   background: var(--surface2); border-radius: 8px; padding: 0.8rem 1rem;
   font-size: 0.8rem; color: var(--text); white-space: pre-wrap;

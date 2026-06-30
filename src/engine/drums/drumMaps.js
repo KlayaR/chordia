@@ -76,6 +76,10 @@ export function makeMap(name, rows) {
     nameFor: (note) => (voices.get(note)?.name ?? `Note ${note}`),
     hasLeftFootKick: () => [...voices.values()].some((v) => v.isKick && v.limb === Limb.LEFT_FOOT),
     crashCount: () => [...voices.values()].filter((v) => v.isCrash).length,
+    orderedVoices: () => {
+      const order = { kick: 0, snare: 1, sidestick: 1, tom: 2, hihat: 3, ride: 4, crash: 5, cymbal: 5, unknown: 6 }
+      return [...voices.values()].sort((a, b) => (order[a.vtype] ?? 6) - (order[b.vtype] ?? 6) || a.note - b.note)
+    },
   }
 }
 

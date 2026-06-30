@@ -1,0 +1,73 @@
+.drum-roll {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.dr-labels {
+  flex: 0 0 116px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.dr-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 8px;
+  font-size: 10px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid #2326;
+}
+
+.dr-plot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dr-stripe {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+.dr-stripe[data-odd="0"] { background: var(--surface); }
+.dr-stripe[data-odd="1"] { background: #14161b; }
+
+.dr-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #3a3d42;
+}
+.dr-bar-num {
+  position: absolute;
+  bottom: 1px;
+  left: 2px;
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.dr-note {
+  position: absolute;
+  width: 4px;
+  border-radius: 1px;
+  transform: translateX(-2px);
+  pointer-events: none;
+}
+
+.dr-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
