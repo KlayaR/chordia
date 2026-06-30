@@ -6,6 +6,7 @@ import Nav from './components/Nav'
 import VoicerPage from './pages/Voicer'
 import ScaleFinderPage from './pages/ScaleFinder'
 import HumanizerPage from './pages/Humanizer'
+import PianoHumanizerPage from './pages/PianoHumanizer'
 import ErrorBoundary from './components/ErrorBoundary'
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
           <Route path="/voicer" element={<VoicerPage />} />
           <Route path="/scale-finder" element={<ScaleFinderPage />} />
           <Route path="/humanizer" element={<HumanizerPage />} />
+          <Route path="/piano-humanizer" element={<PianoHumanizerPage />} />
           <Route path="*" element={<Navigate to="/voicer" replace />} />
         </Routes>
       </ErrorBoundary>

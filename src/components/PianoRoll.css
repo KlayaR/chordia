@@ -1,0 +1,37 @@
+.pr-wrap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.pr-plot {
+  position: relative;
+  width: 100%;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--surface) 0, var(--surface) 7px,
+    #14161b 7px, #14161b 14px
+  );
+}
+
+.pr-cline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #2a2d33;
+}
+.pr-cline span {
+  position: absolute;
+  left: 3px;
+  top: -9px;
+  font-size: 8px;
+  color: var(--muted);
+}
+
+.pr-note {
+  position: absolute;
+  border-radius: 1px;
+  pointer-events: none;
+}

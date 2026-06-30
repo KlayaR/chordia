@@ -53,6 +53,18 @@
 .hz-slider-head b { color: var(--text); }
 .hz-slider input[type=range] { width: 100%; accent-color: var(--accent); }
 
+.ph-styles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+@media (max-width: 560px) { .ph-styles { grid-template-columns: 1fr; } }
+.ph-style {
+  display: flex; flex-direction: column; gap: 0.25rem; text-align: left;
+  padding: 0.7rem 0.85rem; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.ph-style:hover { border-color: #383d4a; background: var(--surface2); }
+.ph-style.active { border-color: var(--accent); background: rgba(167, 143, 255, 0.08); }
+.ph-style-name { font-size: 0.9rem; font-weight: 600; }
+.ph-style-desc { font-size: 0.72rem; color: var(--muted); line-height: 1.35; }
+
 .hz-roll-head { display: flex; align-items: center; justify-content: space-between; }
 .hz-toggle { display: flex; gap: 2px; background: var(--surface2); border-radius: 7px; padding: 2px; }
 .hz-toggle button {
