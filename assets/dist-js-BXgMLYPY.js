@@ -1,0 +1,1 @@
+import{Channel as e,invoke as t}from"./core-Dut2WE1F.js";async function n(n,r){let i=new e;r&&(i.onmessage=r),await t(`plugin:drag|start_drag`,{item:n.item,image:n.icon,options:{mode:n.mode},onEvent:i})}export{n as startDrag};
