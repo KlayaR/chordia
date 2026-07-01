@@ -41,8 +41,10 @@ export function voiceLeadEvents(events, { rhLow = 55, rhHigh = 81, bassLow = 40 
     const c = ev.chord
     const pcs = [...new Set(c.intervals.map((iv) => (c.root + iv) % 12))]
     const rh = smoothVoicing(pcs, prev, rhLow, rhHigh)
-    // bass = root in the low register, nearest to the previous bass for a smooth line
-    let bass = bassLow + (((c.root - bassLow) % 12) + 12) % 12
+    // bass = root (or tonic pedal, if the event sets bassPc) in the low register,
+    // nearest to the previous bass for a smooth line
+    const bassPc = ev.bassPc != null ? ev.bassPc : c.root
+    let bass = bassLow + (((bassPc - bassLow) % 12) + 12) % 12
     if (prevBass !== null && Math.abs(bass - 12 - prevBass) < Math.abs(bass - prevBass) && bass - 12 >= bassLow - 6) bass -= 12
     ev.rh = rh
     ev.bass = bass

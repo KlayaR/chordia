@@ -66,7 +66,7 @@ const POOLS = {
   prechorus: [['bVI', 'bVII'], ['iv', 'bVI', 'bVII'], ['iv', 'v', 'bVI', 'bVII']],
   chorus:    [['i', 'bVI', 'bVII'], ['bVI', 'bVII', 'i'], ['i', 'bVII', 'bVI', 'bVII'], ['bVI', 'bVII', 'bIII', 'i'], ['iv', 'i', 'bVI', 'bVII']],
   bridge:    [['i', 'iv'], ['bVI', 'bIII', 'bVII', 'iv'], ['i', 'bVII']],
-  breakdown: [['i'], ['i', 'bII']],
+  breakdown: [['i'], ['i', 'bVII'], ['i', 'iv']],
   outro:     [['i', 'bVI'], ['i']],
 }
 
@@ -104,19 +104,39 @@ export function generateSong({ keyRoot = 4, scaleName = 'Natural Minor', structu
   const events = []
   let beatCursor = 0
 
+  // The chorus is the hook and the verse is a recurring theme — pick each ONCE
+  // and reuse it every occurrence, so the song has identity. Other section types
+  // (intro/bridge/breakdown/outro) are picked fresh.
+  const themed = {}
+  const progFor = (type) => {
+    if (type === 'chorus' || type === 'verse' || type === 'prechorus') {
+      if (!themed[type]) themed[type] = pick(rng, POOLS[type] || POOLS.verse)
+      return themed[type]
+    }
+    return pick(rng, POOLS[type] || POOLS.verse)
+  }
+
+  // per-song: pedal-point verses/intros (tonic drone) or moving bass
+  const usePedal = rng.uniform(0, 1) < 0.5
+
   for (const [type, bars] of structure) {
     const def = SECTIONS[type]
-    const prog = pick(rng, POOLS[type] || POOLS.verse)
+    const prog = progFor(type)
+    const pedal = usePedal && (type === 'verse' || type === 'intro')
+    const accelerate = type === 'prechorus'   // harmonic rhythm doubles into the drop
     const totalBeats = bars * 4
     const sectionEvents = []
     let filled = 0
     let idx = 0
     while (filled < totalBeats) {
       const token = prog[idx % prog.length]
-      const dur = Math.min(def.beatsPerChord, totalBeats - filled)
+      const remaining = totalBeats - filled
+      let dur = Math.min(def.beatsPerChord, remaining)
+      if (accelerate && remaining <= def.beatsPerChord) dur = Math.min(2, remaining)  // final bar pushes
       const chord = resolveRoman(token, keyRoot, def.color)
       const ev = {
-        section: type, roman: token, chord,
+        section: type, roman: token, chord, pedal,
+        bassPc: pedal ? keyRoot : chord.root,
         startBeat: beatCursor + filled, durBeats: dur,
         bar: Math.floor((beatCursor + filled) / 4) + 1,
       }
@@ -126,7 +146,7 @@ export function generateSong({ keyRoot = 4, scaleName = 'Natural Minor', structu
       idx += 1
     }
     sections.push({ type, bars, comping: def.comping, color: def.color, energy: def.energy,
-      startBeat: beatCursor, events: sectionEvents, progression: prog })
+      pedal, startBeat: beatCursor, events: sectionEvents, progression: prog })
     beatCursor += totalBeats
   }
 
