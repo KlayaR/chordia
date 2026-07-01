@@ -6,7 +6,7 @@ const TOOLS = [
   { to: '/scale-finder', label: 'Scale Finder' },
   { to: '/humanizer', label: 'Drum Humanizer' },
   { to: '/piano-humanizer', label: 'Piano Humanizer' },
-  // { to: '/song-builder', label: 'Song Builder' },  // coming soon
+  { to: '/song-builder', label: 'Song Builder' },
 ]
 
 export default function Nav() {
