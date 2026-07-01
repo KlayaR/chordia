@@ -1,8 +1,8 @@
 /**
  * Realistic piano via Tone.Sampler + the Salamander Grand Piano samples
- * (multi-sampled every minor third, pitch-shifted between). Far better than the
- * Scale Finder's synth, and it lives inside Tone.js so it syncs to Tone.Transport
- * for timeline playback. Samples stream from the Tone.js CDN on first use.
+ * (multi-sampled every minor third, pitch-shifted between). Lives inside Tone.js
+ * so it syncs to Tone.Transport for timeline playback, and drives the Scale
+ * Finder's note/chord/scale previews. Samples stream from the Tone.js CDN.
  */
 import * as Tone from 'tone'
 
@@ -21,33 +21,56 @@ const SAMPLES = {
 let sampler = null
 let loadPromise = null
 
+// Construct the sampler (begins downloading samples). Safe to call without a
+// user gesture — it just kicks off the fetch, no AudioContext resume.
+function build() {
+  if (loadPromise) return loadPromise
+  loadPromise = new Promise((resolve) => {
+    sampler = new Tone.Sampler({
+      urls: SAMPLES, baseUrl: BASE, release: 1.2,
+      onload: () => resolve(sampler),
+    }).toDestination()
+    sampler.volume.value = -6
+  })
+  return loadPromise
+}
+
+// Start the download early (e.g. on page mount) so the first note is instant.
+export function preloadPiano() { build() }
+
 export function pianoLoaded() {
   return !!sampler && sampler.loaded
 }
 
+// Resume the audio context (needs a user gesture) and wait for samples.
 export async function ensurePiano() {
+  const p = build()
   await Tone.start()
-  if (sampler && sampler.loaded) return sampler
-  if (!loadPromise) {
-    loadPromise = new Promise((resolve) => {
-      sampler = new Tone.Sampler({
-        urls: SAMPLES,
-        baseUrl: BASE,
-        release: 1.2,
-        onload: () => resolve(sampler),
-      }).toDestination()
-      sampler.volume.value = -6
-    })
-  }
-  return loadPromise
+  await p
+  return sampler
 }
 
 export const midiToNote = (m) => Tone.Frequency(m, 'midi').toNote()
 
-// One-shot chord/notes preview (not transport-scheduled).
-export async function previewNotes(midis, dur = 1.4, vel = 0.7) {
+export async function playNote(midi, dur = 1.4, vel = 0.7) {
+  const s = await ensurePiano()
+  s.triggerAttackRelease(midiToNote(midi), dur, undefined, vel)
+}
+
+export async function playChord(midis, dur = 1.8, vel = 0.7) {
+  if (!midis || midis.length === 0) return
   const s = await ensurePiano()
   s.triggerAttackRelease(midis.map(midiToNote), dur, undefined, vel)
 }
+
+export async function playSequence(midis, intervalMs = 150, dur = 0.9, vel = 0.7) {
+  if (!midis || midis.length === 0) return
+  const s = await ensurePiano()
+  const now = Tone.now()
+  midis.forEach((m, i) => s.triggerAttackRelease(midiToNote(m), dur, now + (i * intervalMs) / 1000, vel))
+}
+
+// One-shot chord/notes preview (alias of playChord, kept for callers).
+export const previewNotes = playChord
 
 export { Tone }

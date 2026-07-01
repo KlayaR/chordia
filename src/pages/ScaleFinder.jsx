@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import PianoKeyboard from '../components/PianoKeyboard'
 import { findScales, detectFromFile, extraNotes, scaleMidiNotes, noteName } from '../engine/scales'
-import { playNote, playChord, playSequence } from '../audio'
+import { playNote, playChord, playSequence, preloadPiano } from '../pianoAudio'
 import './ScaleFinder.css'
 
 function useBlockBrowserFileDrop() {
@@ -18,6 +18,7 @@ function useBlockBrowserFileDrop() {
 
 export default function ScaleFinderPage() {
   useBlockBrowserFileDrop()
+  useEffect(() => { preloadPiano() }, [])   // start downloading piano samples on open
   const [selected, setSelected] = useState(() => new Set())
   const [scaleHi, setScaleHi]   = useState(() => new Set())
   const [hoverSound, setHoverSound] = useState(true)
