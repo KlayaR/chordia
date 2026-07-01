@@ -42,26 +42,75 @@ export const SECTIONS = {
 }
 
 // [sectionType, bars]
-// Verse 1 skips the pre-chorus (§1.2) — the pre-chorus "lift" is saved for V2,
-// once the listener already knows the chorus, so its promise pays off.
-export const STRUCTURES = {
-  'Anthemic (BMTH / Bad Omens)': [
-    ['intro', 8], ['verse', 8], ['chorus', 8],
-    ['verse', 8], ['prechorus', 4], ['chorus', 8],
-    ['bridge', 8], ['breakdown', 4], ['chorus', 8], ['outro', 8],
-  ],
-  'Atmospheric (Dayseeker)': [
-    ['intro', 8], ['verse', 16], ['chorus', 8],
-    ['verse', 8], ['prechorus', 4], ['chorus', 8],
-    ['bridge', 8], ['chorus', 16], ['outro', 8],
-  ],
-  'Heavy (breakdown-driven)': [
-    ['intro', 4], ['verse', 8], ['chorus', 8],
-    ['verse', 8], ['prechorus', 4], ['chorus', 8],
-    ['breakdown', 8], ['bridge', 4], ['chorus', 8], ['outro', 4],
-  ],
+// Style biases for the structure generator (probabilities / choices).
+export const STYLES = {
+  'Anthemic (BMTH / Bad Omens)': { coldOpen: 0.4, longVerse: 0.25, cycles: [2, 2, 3], doubleChorus: 0.35, breakdown: 0.6, heavy: false, bookend: 0.4 },
+  'Atmospheric (Dayseeker)':     { coldOpen: 0.75, longVerse: 0.6, cycles: [2, 2, 3], doubleChorus: 0.2, breakdown: 0.2, heavy: false, bookend: 0.7 },
+  'Heavy (breakdown-driven)':    { coldOpen: 0.2, longVerse: 0.1, cycles: [2, 2],    doubleChorus: 0.25, breakdown: 0.9, heavy: true, bookend: 0.3 },
 }
-export const STRUCTURE_NAMES = Object.keys(STRUCTURES)
+export const STRUCTURE_NAMES = Object.keys(STYLES)
+
+// Assemble a varied section list (the skeleton + the rulebook's §1.2 deviations),
+// then fit it to `targetBars` by musical inflation/deflation (verse length, doubled
+// choruses) — NOT by adding more distinct verses.
+function generateStructure(rng, targetBars, styleName) {
+  const st = STYLES[styleName] || STYLES[STRUCTURE_NAMES[0]]
+  const P = (p) => rng.uniform(0, 1) < p
+  const one = (arr) => arr[Math.floor(rng.uniform(0, arr.length))]
+  const seq = []
+
+  seq.push(['intro', P(st.coldOpen) ? 8 : 4])                 // cold-open or short intro
+  const cycles = one(st.cycles)
+  for (let c = 0; c < cycles; c++) {
+    seq.push(['verse', P(st.longVerse) ? 16 : 8])
+    if (c > 0 || P(0.2)) seq.push(['prechorus', P(0.5) ? 4 : 2])  // V1 usually skips the pre
+    seq.push(['chorus', 8])
+    if (c < cycles - 1 && P(st.doubleChorus)) seq.push(['chorus', 8])
+  }
+  // bridge / breakdown block — placement variety
+  const bd = P(st.breakdown)
+  const br = P(0.7) || !bd
+  if (st.heavy && bd && P(0.4)) {                              // breakdown as a false bridge (mid)
+    seq.push(['breakdown', one([4, 8])])
+    if (br) seq.push(['bridge', 4])
+  } else {
+    if (br) seq.push(['bridge', one([4, 8])])
+    if (bd) seq.push(['breakdown', one([4, 8])])
+  }
+  seq.push(['chorus', P(0.4) ? 12 : 8])                        // final chorus (often extended)
+  if (P(0.6)) seq.push(['chorus', 8])                          // …and often doubled
+  seq.push(['outro', P(st.bookend) ? 8 : 4])                   // bookend or hard-ish cut
+
+  fitToTarget(seq, targetBars)
+  return seq
+}
+
+function fitToTarget(seq, target) {
+  const sum = () => seq.reduce((s, [, b]) => s + b, 0)
+  const beforeBackHalf = () => {
+    const i = seq.findIndex((s) => s[0] === 'bridge' || s[0] === 'breakdown')
+    return i < 0 ? Math.max(1, seq.length - 1) : i
+  }
+  let g = 0
+  // INFLATE — spread the repetition instead of stacking it at the end:
+  while (sum() < target - 4 && g++ < 120) {
+    const need = target - sum()
+    const v8 = seq.find((s) => s[0] === 'verse' && s[1] === 8)
+    if (v8) { v8[1] = 16; continue }                          // 1) lengthen verses
+    if (need >= 16) { seq.splice(beforeBackHalf(), 0, ['verse', 16], ['chorus', 8]); continue } // 2) repeat a V–C cycle
+    const ci = seq.findIndex((s, idx) => s[0] === 'chorus' && seq[idx + 1]?.[0] !== 'chorus')
+    if (ci >= 0) { seq.splice(ci + 1, 0, ['chorus', 8]); continue } // 3) double an isolated chorus
+    break
+  }
+  // DEFLATE
+  while (sum() > target + 4 && g++ < 160) {
+    const v16 = [...seq].reverse().find((s) => s[0] === 'verse' && s[1] === 16)
+    if (v16) { v16[1] = 8; continue }
+    const ci = seq.findIndex((s, idx) => s[0] === 'chorus' && seq[idx + 1]?.[0] === 'chorus')
+    if (ci >= 0) { seq.splice(ci, 1); continue }
+    break
+  }
+}
 
 // progression pools per section type (roman-numeral tokens, natural minor).
 // Verses stay static (2-3 chords); the chorus opens up. Canonical progressions
@@ -115,9 +164,14 @@ const pick = (rng, arr) => arr[Math.floor(rng.uniform(0, arr.length))]
  * Each event: { section, roman, chord, startBeat, durBeats, bar }.
  * (Voice leading + note assignment happens in voiceLead.js.)
  */
-export function generateSong({ keyRoot = 4, scaleName = 'Natural Minor', structureName = 'Anthemic (BMTH / Bad Omens)', seed } = {}) {
+export function generateSong({ keyRoot = 4, scaleName = 'Natural Minor', structureName = STRUCTURE_NAMES[0], seed, tempo = 140 } = {}) {
   const rng = makeRng(seed)
-  const structure = STRUCTURES[structureName] || STRUCTURES[STRUCTURE_NAMES[0]]
+  // Target a genre-typical duration (~2:55–4:10, centred ~3:25) and size the song
+  // in bars for the CURRENT tempo, so length adapts to tempo. Then assemble a
+  // varied structure that fits.
+  const targetSec = 190 + rng.uniform(-15, 50)
+  const targetBars = Math.max(24, Math.round((targetSec * tempo) / 60 / 4))
+  const structure = generateStructure(rng, targetBars, structureName)
   const sections = []
   const events = []
   let beatCursor = 0
@@ -169,5 +223,6 @@ export function generateSong({ keyRoot = 4, scaleName = 'Natural Minor', structu
     beatCursor += totalBeats
   }
 
-  return { sections, events, keyRoot, scaleName, structureName, totalBeats: beatCursor, totalBars: beatCursor / 4 }
+  return { sections, events, keyRoot, scaleName, structureName, targetSec,
+    totalBeats: beatCursor, totalBars: beatCursor / 4 }
 }

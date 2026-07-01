@@ -28,15 +28,25 @@ export default function SongBuilderPage() {
   const dragUrlRef = useRef(null)
   const rafRef = useRef(0)
 
-  // generate + voice-lead whenever the key/structure/seed changes
+  // Song length adapts to tempo, but debounce so dragging the slider doesn't
+  // restructure on every tick — the song re-fits ~0.4s after you settle.
+  const [genTempo, setGenTempo] = useState(tempo)
+  useEffect(() => {
+    const t = setTimeout(() => setGenTempo(tempo), 400)
+    return () => clearTimeout(t)
+  }, [tempo])
+
+  // generate + voice-lead when key/structure/seed/(settled tempo) changes
   const song = useMemo(() => {
-    const s = generateSong({ keyRoot, structureName, seed })
+    const s = generateSong({ keyRoot, structureName, seed, tempo: genTempo })
     voiceLeadEvents(s.events)
     s.events.forEach((e, i) => { e.id = i })
     return s
-  }, [keyRoot, structureName, seed])
+  }, [keyRoot, structureName, seed, genTempo])
 
   const secPerBeat = 60 / tempo
+  const durSec = song.totalBeats * secPerBeat
+  const fmtDur = `${Math.floor(durSec / 60)}:${String(Math.round(durSec % 60)).padStart(2, '0')}`
 
   // build export blob when song / tempo / feel change
   useEffect(() => {
@@ -95,6 +105,7 @@ export default function SongBuilderPage() {
   }, [song, tempo, secPerBeat, feel])
 
   useEffect(() => stop, [stop])
+  useEffect(() => { stop() }, [song, stop])   // stop playback when the song regenerates
 
   async function buildMidi() {
     const { Midi } = await import('@tonejs/midi')
@@ -165,7 +176,7 @@ export default function SongBuilderPage() {
         <button className={`sb-play ${playing ? 'stop' : ''}`} onClick={playing ? stop : play}>
           {pianoBusy ? 'Loading piano…' : playing ? '■ Stop' : '▶ Play'}
         </button>
-        <span className="sb-meta">{NOTE_NAMES[keyRoot]} minor · {song.totalBars} bars · {song.sections.length} sections</span>
+        <span className="sb-meta">{fmtDur} · {NOTE_NAMES[keyRoot]} minor · {song.totalBars} bars · {song.sections.length} sections</span>
         <div className="sb-spacer" />
         <button className="sb-btn" onClick={download} disabled={!blob}>Download MIDI</button>
         <div className={`sb-drag ${(tauri ? dragPaths : blob) ? 'ready' : ''}`}
