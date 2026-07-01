@@ -42,32 +42,50 @@ export const SECTIONS = {
 }
 
 // [sectionType, bars]
+// Verse 1 skips the pre-chorus (§1.2) — the pre-chorus "lift" is saved for V2,
+// once the listener already knows the chorus, so its promise pays off.
 export const STRUCTURES = {
   'Anthemic (BMTH / Bad Omens)': [
-    ['intro', 8], ['verse', 8], ['prechorus', 4], ['chorus', 8],
+    ['intro', 8], ['verse', 8], ['chorus', 8],
     ['verse', 8], ['prechorus', 4], ['chorus', 8],
     ['bridge', 8], ['breakdown', 4], ['chorus', 8], ['outro', 8],
   ],
   'Atmospheric (Dayseeker)': [
-    ['intro', 8], ['verse', 16], ['chorus', 8], ['verse', 8], ['chorus', 8],
+    ['intro', 8], ['verse', 16], ['chorus', 8],
+    ['verse', 8], ['prechorus', 4], ['chorus', 8],
     ['bridge', 8], ['chorus', 16], ['outro', 8],
   ],
   'Heavy (breakdown-driven)': [
-    ['intro', 4], ['verse', 8], ['prechorus', 4], ['chorus', 8],
-    ['verse', 8], ['chorus', 8], ['breakdown', 8], ['bridge', 4], ['chorus', 8], ['outro', 4],
+    ['intro', 4], ['verse', 8], ['chorus', 8],
+    ['verse', 8], ['prechorus', 4], ['chorus', 8],
+    ['breakdown', 8], ['bridge', 4], ['chorus', 8], ['outro', 4],
   ],
 }
 export const STRUCTURE_NAMES = Object.keys(STRUCTURES)
 
-// progression pools per section type (roman-numeral tokens)
+// progression pools per section type (roman-numeral tokens, natural minor).
+// Verses stay static (2-3 chords); the chorus opens up. Canonical progressions
+// from the genre rulebook are first in each list.
 const POOLS = {
-  intro:     [['i'], ['i', 'bVI'], ['i', 'bVII']],
-  verse:     [['i', 'bVII'], ['i', 'bVI', 'bVII'], ['i', 'v', 'bVI', 'bVII'], ['i', 'bIII', 'bVII', 'iv'], ['i']],
-  prechorus: [['bVI', 'bVII'], ['iv', 'bVI', 'bVII'], ['iv', 'v', 'bVI', 'bVII']],
-  chorus:    [['i', 'bVI', 'bVII'], ['bVI', 'bVII', 'i'], ['i', 'bVII', 'bVI', 'bVII'], ['bVI', 'bVII', 'bIII', 'i'], ['iv', 'i', 'bVI', 'bVII']],
-  bridge:    [['i', 'iv'], ['bVI', 'bIII', 'bVII', 'iv'], ['i', 'bVII']],
+  intro:     [['i'], ['i', 'bVI']],
+  verse:     [['i', 'bVI'], ['i', 'bVII', 'bVI'], ['i'], ['i', 'v', 'bVI', 'bVII']],
+  prechorus: [['bVI', 'bVII', 'i'], ['iv', 'bVII'], ['bVI', 'bVII'], ['iv', 'v', 'bVI', 'bVII']],
+  chorus:    [['i', 'bVI', 'bIII', 'bVII'], ['i', 'bVII', 'bVI', 'bVII'], ['bVI', 'bVII', 'i', 'i'], ['i', 'bVI', 'bVII']],
+  bridge:    [['iv', 'bVI', 'bVII'], ['bVI', 'bIII', 'bVII', 'iv'], ['i', 'bVI']],
   breakdown: [['i'], ['i', 'bVII'], ['i', 'iv']],
   outro:     [['i', 'bVI'], ['i']],
+}
+
+// harmonic-rhythm cells (beat durations per chord slot). Verses/pre are broken &
+// asymmetric; the CHORUS flattens to even — that contrast is the "release" (§3.4).
+const RHYTHM = {
+  intro:     [[8], [4, 4]],
+  verse:     [[3, 5], [5, 3], [3, 3, 2], [6, 2]],
+  prechorus: [[3, 3, 2], [2, 2, 2, 2]],
+  chorus:    [[4], [4, 4]],
+  bridge:    [[8], [4, 4]],
+  breakdown: [[16]],
+  outro:     [[8], [4, 4]],
 }
 
 function applyColor(base, color) {
@@ -107,13 +125,17 @@ export function generateSong({ keyRoot = 4, scaleName = 'Natural Minor', structu
   // The chorus is the hook and the verse is a recurring theme — pick each ONCE
   // and reuse it every occurrence, so the song has identity. Other section types
   // (intro/bridge/breakdown/outro) are picked fresh.
-  const themed = {}
+  // pick the progression AND the harmonic-rhythm cell once per recurring section
+  // type, so the hook + its groove stay consistent across the song
+  const themedProg = {}, themedCell = {}
+  const themedTypes = new Set(['chorus', 'verse', 'prechorus'])
   const progFor = (type) => {
-    if (type === 'chorus' || type === 'verse' || type === 'prechorus') {
-      if (!themed[type]) themed[type] = pick(rng, POOLS[type] || POOLS.verse)
-      return themed[type]
-    }
+    if (themedTypes.has(type)) return (themedProg[type] ||= pick(rng, POOLS[type] || POOLS.verse))
     return pick(rng, POOLS[type] || POOLS.verse)
+  }
+  const cellFor = (type) => {
+    if (themedTypes.has(type)) return (themedCell[type] ||= pick(rng, RHYTHM[type] || RHYTHM.verse))
+    return pick(rng, RHYTHM[type] || RHYTHM.chorus)
   }
 
   // per-song: pedal-point verses/intros (tonic drone) or moving bass
@@ -122,17 +144,14 @@ export function generateSong({ keyRoot = 4, scaleName = 'Natural Minor', structu
   for (const [type, bars] of structure) {
     const def = SECTIONS[type]
     const prog = progFor(type)
+    const cell = cellFor(type)
     const pedal = usePedal && (type === 'verse' || type === 'intro')
-    const accelerate = type === 'prechorus'   // harmonic rhythm doubles into the drop
     const totalBeats = bars * 4
     const sectionEvents = []
-    let filled = 0
-    let idx = 0
+    let filled = 0, ci = 0, pi = 0
     while (filled < totalBeats) {
-      const token = prog[idx % prog.length]
-      const remaining = totalBeats - filled
-      let dur = Math.min(def.beatsPerChord, remaining)
-      if (accelerate && remaining <= def.beatsPerChord) dur = Math.min(2, remaining)  // final bar pushes
+      const dur = Math.min(cell[ci % cell.length], totalBeats - filled)
+      const token = prog[pi % prog.length]
       const chord = resolveRoman(token, keyRoot, def.color)
       const ev = {
         section: type, roman: token, chord, pedal,
@@ -143,10 +162,10 @@ export function generateSong({ keyRoot = 4, scaleName = 'Natural Minor', structu
       sectionEvents.push(ev)
       events.push(ev)
       filled += dur
-      idx += 1
+      ci += 1; pi += 1
     }
     sections.push({ type, bars, comping: def.comping, color: def.color, energy: def.energy,
-      pedal, startBeat: beatCursor, events: sectionEvents, progression: prog })
+      pedal, cell, startBeat: beatCursor, events: sectionEvents, progression: prog })
     beatCursor += totalBeats
   }
 
